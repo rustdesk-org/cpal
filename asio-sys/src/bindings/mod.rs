@@ -908,6 +908,17 @@ extern "C" fn sample_rate_did_change(s_rate: c_double) {
     eprintln!("unhandled sample rate change to {}", s_rate);
 }
 
+static RESET_REQUEST_HANDLE: Mutex<Option<Box<dyn Fn() + Send + Sync + 'static>>> =
+    Mutex::new(None);
+
+#[inline]
+pub fn set_reset_request_handle<F>(handle: F)
+where
+    F: Fn() + Send + Sync + 'static,
+{
+    *RESET_REQUEST_HANDLE.lock().unwrap() = Some(Box::new(handle));
+}
+
 /// Message callback for ASIO to notify of certain events.
 extern "C" fn asio_message(
     selector: c_long,
@@ -937,6 +948,9 @@ extern "C" fn asio_message(
             // the driver is done by completely destruct it. I.e. ASIOStop(), ASIODisposeBuffers(),
             // Destruction. Afterwards you initialize the driver again.
             // TODO: Handle this.
+            if let Some(handle) = RESET_REQUEST_HANDLE.lock().unwrap().as_ref() {
+                handle();
+            }
             1
         }
 
