@@ -24,7 +24,7 @@ pub(crate) mod jack;
 pub(crate) mod null;
 #[cfg(target_os = "android")]
 pub(crate) mod oboe;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "screencapturekit"))]
 pub(crate) mod screencapturekit;
 #[cfg(windows)]
 pub(crate) mod wasapi;

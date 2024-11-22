@@ -23,9 +23,12 @@ impl Devices {
                     description: "Failed to get current shareable content".to_string(),
                 })
             };
-            tx.send(res).unwrap();
+            // Can't be failed
+            tx.send(res).ok();
         });
-        let sc_shareable_content = rx.recv().unwrap()?;
+        let sc_shareable_content = rx.recv().map_err(|e| BackendSpecificError {
+            description: format!("Failed to receive shareable content result: {e}"),
+        })??;
 
         let mut res = Vec::new();
         for display in sc_shareable_content.displays().iter() {

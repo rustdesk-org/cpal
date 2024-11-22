@@ -10,7 +10,8 @@ use crate::{
 
 use cidre::{
     arc::Retained,
-    cm, define_obj_type, dispatch, ns, objc,
+    cm, define_obj_type, dispatch, ns,
+    objc::{self, Obj},
     sc::{self, StreamOutput, StreamOutputImpl},
 };
 pub use enumerate::{
@@ -35,8 +36,16 @@ impl HostTrait for Host {
     type Device = Device;
 
     fn is_available() -> bool {
-        // Assume screencapturekit is always available
-        true
+        unsafe {
+            let cfg = sc::StreamCfg::new();
+            for name in [c"setCapturesAudio:", c"setExcludesCurrentProcessAudio:"] {
+                let sel = objc::sel_reg_name(name.as_ptr() as _);
+                if !cfg.responds_to_sel(sel) {
+                    return false;
+                }
+            }
+            true
+        }
     }
 
     fn devices(&self) -> Result<Self::Devices, DevicesError> {
@@ -185,8 +194,10 @@ impl Device {
     {
         let queue = dispatch::Queue::serial_with_ar_pool();
         let mut cfg = sc::StreamCfg::new();
-        cfg.set_captures_audio(true);
-        cfg.set_excludes_current_process_audio(false);
+        unsafe {
+            cfg.set_captures_audio(true);
+            cfg.set_excludes_current_process_audio(false);
+        }
         let windows = ns::Array::new();
         let filter = sc::ContentFilter::with_display_excluding_windows(&self.display, &windows);
         let sc_stream = sc::Stream::new(&filter, &cfg);
@@ -260,9 +271,12 @@ impl StreamTrait for Stream {
                 } else {
                     Result::Ok(())
                 };
-                tx.send(res).unwrap();
+                // Can't be failed
+                tx.send(res).ok();
             });
-            rx.recv().unwrap()?;
+            rx.recv().map_err(|e| BackendSpecificError {
+                description: format!("Failed to receive stream play result: {e}"),
+            })??;
             stream.playing = true;
         }
         Ok(())
@@ -280,9 +294,12 @@ impl StreamTrait for Stream {
                 } else {
                     Result::Ok(())
                 };
-                tx.send(res).unwrap();
+                // Can't be failed
+                tx.send(res).ok();
             });
-            rx.recv().unwrap()?;
+            rx.recv().map_err(|e| BackendSpecificError {
+                description: format!("Failed to receive stream pause result: {e}"),
+            })??;
             stream.playing = false;
         }
         Ok(())
@@ -343,10 +360,14 @@ impl CapturerInner {
         let capture = host_time_to_stream_instant(sample_buf.pts());
         let duration = frames_to_duration(buf_len, self.config.sample_rate);
         let elapsed = start.elapsed();
-        let callback = capture.add(duration).unwrap().add(elapsed).unwrap();
-        let timestamp = crate::InputStreamTimestamp { callback, capture };
-        let info = InputCallbackInfo { timestamp };
-        (self.data_callback)(&data, &info);
+        if let Some(callback) = capture
+            .add(duration)
+            .and_then(|capture| capture.add(elapsed))
+        {
+            let timestamp = crate::InputStreamTimestamp { callback, capture };
+            let info = InputCallbackInfo { timestamp };
+            (self.data_callback)(&data, &info);
+        }
     }
 }
 
