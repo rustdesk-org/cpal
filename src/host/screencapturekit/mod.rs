@@ -21,6 +21,16 @@ pub use enumerate::{
 
 pub mod enumerate;
 
+pub fn is_selector_available(cfg: &sc::StreamCfg) -> bool {
+    for name in [c"setCapturesAudio:", c"setExcludesCurrentProcessAudio:"] {
+        let sel = unsafe { objc::sel_reg_name(name.as_ptr() as _) };
+        if !cfg.responds_to_sel(sel) {
+            return false;
+        }
+    }
+    true
+}
+
 #[derive(Debug)]
 pub struct Host;
 
@@ -36,16 +46,7 @@ impl HostTrait for Host {
     type Device = Device;
 
     fn is_available() -> bool {
-        unsafe {
-            let cfg = sc::StreamCfg::new();
-            for name in [c"setCapturesAudio:", c"setExcludesCurrentProcessAudio:"] {
-                let sel = objc::sel_reg_name(name.as_ptr() as _);
-                if !cfg.responds_to_sel(sel) {
-                    return false;
-                }
-            }
-            true
-        }
+        is_selector_available(&sc::StreamCfg::new())
     }
 
     fn devices(&self) -> Result<Self::Devices, DevicesError> {
@@ -194,6 +195,11 @@ impl Device {
     {
         let queue = dispatch::Queue::serial_with_ar_pool();
         let mut cfg = sc::StreamCfg::new();
+        // This check should always pass because the caller should check `Host::is_available()` first.
+        // However, we still check it here to be safe.
+        if !is_selector_available(&cfg) {
+            return Err(BuildStreamError::StreamConfigNotSupported);
+        }
         unsafe {
             cfg.set_captures_audio(true);
             cfg.set_excludes_current_process_audio(false);
