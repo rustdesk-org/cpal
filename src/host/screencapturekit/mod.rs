@@ -171,9 +171,17 @@ impl Device {
 
     fn default_input_config(&self) -> Result<SupportedStreamConfig, DefaultStreamConfigError> {
         let config = Self::supported_input_configs(self)
-            .expect("failed to get supported input configs")
+            .map_err(|e| DefaultStreamConfigError::BackendSpecific {
+                err: BackendSpecificError {
+                    description: format!("Failed to get supported input configs: {e}"),
+                },
+            })?
             .next()
-            .expect("no supported input configs")
+            .ok_or(DefaultStreamConfigError::BackendSpecific {
+                err: BackendSpecificError {
+                    description: "No supported input configs".to_string(),
+                },
+            })?
             .with_max_sample_rate();
         Ok(config)
     }
