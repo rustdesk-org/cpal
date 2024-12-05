@@ -61,6 +61,7 @@ cidre = { git = "https://github.com/yury/cidre.git", rev = "f05c428", features =
     "av",
     "sc",
     "macos_12_3",
+    "classic-objc-retain-release"
 ], default-features = false, optional = true }
 
 
