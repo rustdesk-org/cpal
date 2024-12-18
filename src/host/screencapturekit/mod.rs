@@ -211,6 +211,7 @@ impl Device {
         unsafe {
             cfg.set_captures_audio(true);
             cfg.set_excludes_current_process_audio(false);
+            cfg.set_shows_cursor(false);
         }
         let windows = ns::Array::new();
         let filter = sc::ContentFilter::with_display_excluding_windows(&self.display, &windows);
